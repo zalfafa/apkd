@@ -18,10 +18,13 @@ classifiers = [
 # curl_cffi is bounded on both sides: the APKPure transport picks TLS
 # impersonation targets from the installed library's BrowserTypeLiteral, and a
 # release that renames or drops one must not change download behaviour silently.
+# The transport filters its preference list against the installed literal at
+# import time, so new releases only ever add candidates; widen the ceiling one
+# minor at a time after checking the literal diff (0.17 was a strict superset).
 dependencies = [
   "requests>=2.32,<3",
   "beautifulsoup4>=4.12,<5",
-  "curl_cffi>=0.16,<0.17",
+  "curl_cffi>=0.16,<0.18",
 ]
 
 # Optional: only needed to pass Cloudflare's browser challenge (see

@@ -16,7 +16,10 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install dependencies
-        run: python -m pip install -e .
+        # The unit suite imports playwright_captcha (shadow-lookup patches,
+        # framework selection) and playwright (uptodown browser path); without
+        # the extras six tests error instead of asserting.
+        run: python -m pip install -e ".[captcha]"
       - name: Unit tests
         run: python -m unittest discover -s tests -v
 
