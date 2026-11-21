@@ -1,12 +1,30 @@
 from __future__ import annotations
 
 import re
+from typing import Any
 from urllib.parse import quote, urljoin, urlparse
 
 from bs4 import BeautifulSoup
 
 from .base import Provider, abi_spellings, matches_abi, normalize_arch
 from ..models import Artifact, DownloadRequest, ProviderError
+
+
+def _is_access_gate(response: Any) -> bool:
+    """Whether a response is APKCombo's Cloudflare Access login, not a search page.
+
+    APKCombo currently puts its pages behind a "private preview" Access login.
+    Treating that HTML as a failed search produces a misleading "app not found"
+    error and hides the actual blocker.
+    """
+    url = str(getattr(response, "url", "") or "").lower()
+    if "cloudflareaccess.com" in url:
+        return True
+    try:
+        text = str(getattr(response, "text", "") or "")[:20000].lower()
+    except Exception:  # noqa: BLE001 - a non-text response is not a gate either
+        return False
+    return "cloudflare access" in text or "private preview" in text
 
 
 def _text_contains_version(text: str | None, version: str | None) -> bool:
@@ -78,6 +96,12 @@ class APKComboProvider(Provider):
     def _find_app(self, package: str) -> str:
         # APKCombo's canonical application URL contains both a slug and package.
         search = self.http.get(f"https://apkcombo.com/search?q={quote(package, safe='')}")
+        if _is_access_gate(search):
+            raise ProviderError(
+                "APKCombo is behind a Cloudflare Access login (private preview); "
+                "unattended resolution needs an access token or a reachable mirror",
+                provider=self.name,
+            )
         # An exact search often resolves straight to the app page.
         if f"/{package}/" in search.url:
             return search.url.rstrip("/")

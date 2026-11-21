@@ -63,6 +63,15 @@ class UptodownTarget:
     only_xapk: str
 
 
+def _is_timeout(exc: Exception) -> bool:
+    """Recognise Playwright's and invisible-playwright's distinct timeout classes."""
+    if "timeout" in type(exc).__name__.lower():
+        return True
+    # Some driver versions surface a timeout as a generic error carrying the
+    # usual "Timeout 30000ms exceeded" message.
+    return re.search(r"\btimeout\s+\d+\s*ms", str(exc), re.IGNORECASE) is not None
+
+
 class UptodownProvider(Provider):
     """Uptodown provider with an explicit, human-assisted browser download.
 
@@ -521,16 +530,6 @@ class UptodownProvider(Provider):
     def _browser_download_url(
         self, target: UptodownTarget
     ) -> tuple[str, list[dict[str, Any]], str | None, str, str | None]:
-        try:
-            from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
-            from playwright.sync_api import sync_playwright
-        except ImportError as exc:
-            raise ProviderError(
-                "Uptodown browser download requires Playwright; install playwright "
-                "and a Chromium/Chrome browser locally",
-                provider=self.name,
-            ) from exc
-
         timeout_ms = self._browser_timeout_ms()
         cdp_url = self._cdp_url()
         headless = self._headless_enabled()
@@ -542,6 +541,30 @@ class UptodownProvider(Provider):
                 file=sys.stderr,
             )
             use_invisible = False
+
+        if use_invisible:
+            # invisible-playwright vendors its own Playwright API, so this mode
+            # must not require the standalone playwright package.
+            try:
+                from invisible_playwright import InvisiblePlaywright
+            except ImportError as exc:
+                raise ProviderError(
+                    "Uptodown invisible mode requires the "
+                    "invisible-playwright package; install it and fetch the "
+                    "engine (`python -m invisible_playwright fetch`)",
+                    provider=self.name,
+                ) from exc
+            sync_playwright = None
+        else:
+            InvisiblePlaywright = None
+            try:
+                from playwright.sync_api import sync_playwright
+            except ImportError as exc:
+                raise ProviderError(
+                    "Uptodown browser download requires Playwright; install playwright "
+                    "and a Chromium/Chrome browser locally",
+                    provider=self.name,
+                ) from exc
         initial_wait_ms = int(self._initial_wait_seconds() * 1000)
         retry_wait_ms = int(self._retry_wait_seconds() * 1000)
         max_attempts = self._max_attempts()
@@ -582,15 +605,6 @@ class UptodownProvider(Provider):
 
         try:
             if use_invisible:
-                try:
-                    from invisible_playwright import InvisiblePlaywright
-                except ImportError as exc:
-                    raise ProviderError(
-                        "Uptodown invisible mode requires the "
-                        "invisible-playwright package; install it and fetch the "
-                        "engine (`python -m invisible_playwright fetch`)",
-                        provider=self.name,
-                    ) from exc
                 engine_cm = InvisiblePlaywright(
                     seed=self._invisible_seed(), headless=headless
                 )
@@ -752,7 +766,9 @@ class UptodownProvider(Provider):
                                     button.click()
                                 response = response_info.value
                                 break
-                            except PlaywrightTimeoutError as exc:
+                            except Exception as exc:
+                                if not _is_timeout(exc):
+                                    raise
                                 if attempt >= max_attempts:
                                     raise ProviderError(
                                         "Uptodown did not return a download URL "

@@ -44,8 +44,11 @@ captcha = [
 # (APKD_UPTODOWN_INVISIBLE=1). Presents a coherent fingerprint so Turnstile
 # does not reject the session outright; an interactive challenge is still
 # completed by the operator. Verified live against Pinterest 14.34.0.
+# 0.51 still exposes InvisiblePlaywright(seed=..., headless=...) and the
+# context/page API used by the Uptodown transport; its bundled _pw does not
+# require the standalone playwright package.
 invisible = [
-  "invisible-playwright>=0.25.5,<0.26",
+  "invisible-playwright>=0.25.5,<0.52",
 ]
 
 [project.scripts]
