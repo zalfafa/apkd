@@ -3,6 +3,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import ModuleType
 from unittest.mock import patch
 
 from apkd.models import Artifact, DownloadRequest, ProviderError
@@ -518,6 +519,43 @@ class ProviderUnitTests(unittest.TestCase):
         with patch.dict(sys.modules, {"invisible_playwright": None}):
             with self.assertRaisesRegex(ProviderError, "invisible-playwright"):
                 provider._browser_download_url(target)
+
+    def test_uptodown_invisible_mode_does_not_need_playwright(self):
+        # invisible-playwright vendors its own Playwright API; the standalone
+        # package must not be a prerequisite for APKD_UPTODOWN_INVISIBLE=1.
+        target = UptodownTarget(
+            app_url="https://pinterest.en.uptodown.com/android",
+            app_id="20013", version="14.34.0", file_id="1210795434",
+            kind="apk",
+            page_url="https://pinterest.en.uptodown.com/android/download/1210795434-x",
+            only_xapk="0",
+        )
+        fake_engine = ModuleType("invisible_playwright")
+
+        def boom(**kwargs):
+            raise ProviderError("invisible engine reached", provider="uptodown")
+
+        fake_engine.InvisiblePlaywright = boom
+        with patch.dict(sys.modules, {
+            "playwright": None,
+            "playwright.sync_api": None,
+            "invisible_playwright": fake_engine,
+        }):
+            with self.assertRaisesRegex(ProviderError, "invisible engine reached"):
+                UptodownProvider(browser=True, invisible=True)._browser_download_url(target)
+
+    def test_browser_timeout_is_detected_across_engines(self):
+        from apkd.providers.uptodown import _is_timeout
+
+        class PlaywrightTimeout(Exception):
+            pass
+
+        class InvisibleTimeout(Exception):
+            pass
+
+        self.assertTrue(_is_timeout(PlaywrightTimeout("boom")))
+        self.assertTrue(_is_timeout(InvisibleTimeout("Timeout 30000ms exceeded")))
+        self.assertFalse(_is_timeout(ValueError("not a timeout")))
 
     def test_uptodown_headless_retry_settings_are_bounded(self):
         provider = UptodownProvider(

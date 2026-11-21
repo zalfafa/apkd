@@ -157,16 +157,22 @@ def resolve_framework(preferred: str | None = None, browser: str = "firefox") ->
     than a silent downgrade, so a typo never masquerades as "it just didn't
     work".
     """
-    available = available_frameworks()
-    if not available:
-        raise ProviderError(INSTALL_HINT)
-
     browser_name = (browser or "firefox").strip().lower()
     if browser_name not in BROWSER_CHOICES:
         raise ProviderError(
             f"unknown browser {browser!r}; choose one of "
             f"{', '.join(BROWSER_CHOICES)}"
         )
+    wanted = preferred.strip().lower() if preferred else None
+    if wanted and wanted not in FRAMEWORK_ORDER:
+        raise ProviderError(
+            f"unknown browser backend {preferred!r}; "
+            f"choose one of {', '.join(FRAMEWORK_ORDER)}"
+        )
+
+    available = available_frameworks()
+    if not available:
+        raise ProviderError(INSTALL_HINT)
     usable = [name for name in available if _framework_supports_browser(name, browser_name)]
     if not usable:
         raise ProviderError(
@@ -174,13 +180,7 @@ def resolve_framework(preferred: str | None = None, browser: str = "firefox") ->
             provider="apkmirror",
         )
 
-    if preferred:
-        wanted = preferred.strip().lower()
-        if wanted not in FRAMEWORK_ORDER:
-            raise ProviderError(
-                f"unknown browser backend {preferred!r}; "
-                f"choose one of {', '.join(FRAMEWORK_ORDER)}"
-            )
+    if wanted:
         if wanted not in usable:
             reason = (
                 "it is Chromium-only (CDP stealth injection)"
