@@ -149,6 +149,21 @@ class ProviderUnitTests(unittest.TestCase):
         # Must return rather than exhaust the interpreter's recursion budget.
         self.assertIsNone(APKPureProvider._search_history(node, "9.9.9"))
 
+    def test_apkcombo_reports_cloudflare_access_gate(self):
+        from apkd.providers.apkcombo import APKComboProvider
+
+        class Resp:
+            url = (
+                "https://cold-heart-ab6d.cloudflareaccess.com/cdn-cgi/access/login/"
+                "apkcombo.com"
+            )
+            text = "<title>Sign in ・ Cloudflare Access</title>"
+
+        provider = APKComboProvider()
+        provider.http.get = lambda url, **kw: Resp()
+        with self.assertRaisesRegex(ProviderError, "Cloudflare Access"):
+            provider._find_app("com.google.android.apps.photos")
+
     def test_apkcombo_resolves_opaque_d_variant_without_downloading(self):
         from apkd.providers.apkcombo import APKComboProvider
 
